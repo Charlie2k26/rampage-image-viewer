@@ -1,0 +1,23 @@
+{
+  "name": "image-viewer",
+  "version": "0.1.0",
+  "description": "View images and SVGs with numbered comments, freehand drawing and batch chat submission.",
+  "author": {
+    "name": "Rampage"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Image Viewer",
+    "shortDescription": "Preview images, draw and comment directly.",
+    "longDescription": "Reusable image and SVG viewer with numbered pins, compact comment popups, freehand annotations, right-click batch comments and downloads. SVGs also include Code and Copy source. Each new image uses the same template with fresh comments.",
+    "developerName": "Rampage",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "Open this image in the comment viewer.",
+      "Show this SVG with Preview and Code."
+    ]
+  }
+}
