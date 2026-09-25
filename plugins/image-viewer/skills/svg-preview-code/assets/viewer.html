@@ -1,0 +1,127 @@
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400;500&display=swap">
+<div id="svg-viewer-INSTANCE">
+<style>
+#svg-viewer-INSTANCE {font-family:"Google Sans Flex";}
+#svg-viewer-INSTANCE .drawing {display:block;width:100%;height:auto;background:white;}
+#svg-viewer-INSTANCE textarea {width:100%;box-sizing:border-box;overflow-wrap:anywhere;}
+#svg-viewer-INSTANCE .selection-stage {position:relative;}
+#svg-viewer-INSTANCE .selection-overlay {position:absolute;inset:0;width:100%;height:100%;touch-action:none;}
+#svg-viewer-INSTANCE .selection-overlay[hidden] {display:none;}
+#svg-viewer-INSTANCE .comment-pins {position:absolute;inset:0;pointer-events:none;}
+#svg-viewer-INSTANCE .comment-pin {position:absolute;transform:translate(-50%,-50%);pointer-events:auto;width:28px;height:28px;border-radius:50%;border:2px solid var(--background);background:var(--primary);color:var(--primary-foreground);font:inherit;display:grid;place-items:center;padding:0;}
+#svg-viewer-INSTANCE .comment-fields[hidden] {display:none;}
+#svg-viewer-INSTANCE .comment-fields {position:absolute;z-index:3;display:grid;gap:5px;width:min(240px,calc(100% - 16px));box-sizing:border-box;padding:8px;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px color-mix(in srgb,var(--foreground) 14%,transparent);}
+#svg-viewer-INSTANCE .context-menu {position:absolute;z-index:5;padding:6px;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border);border-radius:8px;}
+#svg-viewer-INSTANCE .context-menu[hidden] {display:none;}
+#svg-viewer-INSTANCE .viewer-panel {margin-top:12px;}
+</style>
+<div class="viz-row">
+<div class="nav nav-pills" role="tablist" aria-label="SVG view">
+<button class="nav-link active" id="svg-INSTANCE-preview-tab" role="tab" aria-controls="svg-INSTANCE-preview-panel" aria-selected="true" type="button">Preview</button>
+<button class="nav-link" id="svg-INSTANCE-code-tab" role="tab" aria-controls="svg-INSTANCE-code-panel" aria-selected="false" type="button">Code</button>
+</div>
+<button class="btn" type="button" id="svg-INSTANCE-copy">Copy source</button>
+<a class="btn" id="svg-INSTANCE-download" download="DOWNLOAD_PLACEHOLDER">Download SVG</a>
+<span id="svg-INSTANCE-status" class="text-small" role="status" aria-live="polite"></span>
+</div>
+<div id="svg-INSTANCE-preview-panel" class="viewer-panel" role="tabpanel" aria-labelledby="svg-INSTANCE-preview-tab"><div class="selection-stage"><img class="drawing" id="svg-INSTANCE-drawing" alt="LABEL_PLACEHOLDER" draggable="false" /><svg id="svg-INSTANCE-overlay" class="selection-overlay cursor-interaction" aria-label="Click or drag to select an area to comment on"></svg><div id="svg-INSTANCE-pins" class="comment-pins"></div>
+<div id="svg-INSTANCE-context" class="context-menu" hidden><button class="btn" type="button" id="svg-INSTANCE-send-all">Send all comments to chat</button><span id="svg-INSTANCE-batch-status" role="status" class="text-small"></span></div>
+<div id="svg-INSTANCE-comment-panel" class="comment-fields" role="dialog" aria-label="Comment on selected area" hidden><div class="viz-row"><span id="svg-INSTANCE-comment-title">Comment</span><button class="btn btn-ghost" type="button" id="svg-INSTANCE-close" aria-label="Close comment">Close</button></div>
+<div id="svg-INSTANCE-selection" class="sr-only" aria-live="polite">No area selected</div>
+<label class="sr-only" for="svg-INSTANCE-comment">Your comment</label><textarea id="svg-INSTANCE-comment" class="form-control" rows="2" placeholder="What would you like to change?"></textarea>
+<div class="viz-row"><button id="svg-INSTANCE-send" class="btn btn-primary" type="button" disabled>Send to chat</button><button id="svg-INSTANCE-copy-comment" class="btn" type="button" disabled>Copy</button><span id="svg-INSTANCE-comment-status" class="text-small" role="status"></span></div>
+</div></div></div>
+<div id="svg-INSTANCE-code-panel" class="viewer-panel" role="tabpanel" aria-labelledby="svg-INSTANCE-code-tab" hidden><label class="sr-only" for="svg-INSTANCE-source">SVG source</label><textarea id="svg-INSTANCE-source" class="form-control" rows="16" readonly spellcheck="false"></textarea></div>
+<script type="application/json" id="svg-INSTANCE-source-data">SOURCE_PLACEHOLDER</script>
+<script>
+(function(){
+const root=document.getElementById('svg-viewer-INSTANCE');
+const source=JSON.parse(root.querySelector('#svg-INSTANCE-source-data').textContent);
+const field=root.querySelector('#svg-INSTANCE-source');field.value=source;
+const uri='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(source);
+root.querySelector('#svg-INSTANCE-drawing').src=uri;
+root.querySelector('#svg-INSTANCE-download').href=uri;
+const overlay=root.querySelector('#svg-INSTANCE-overlay');
+const pinLayer=root.querySelector('#svg-INSTANCE-pins');
+const panel=root.querySelector('#svg-INSTANCE-comment-panel');
+const comment=root.querySelector('#svg-INSTANCE-comment');
+
+const selectionLabel=root.querySelector('#svg-INSTANCE-selection');
+
+const send=root.querySelector('#svg-INSTANCE-send');
+const copyComment=root.querySelector('#svg-INSTANCE-copy-comment');
+const feedback=root.querySelector('#svg-INSTANCE-comment-status');
+const doc=new DOMParser().parseFromString(source,'image/svg+xml');
+const original=doc.documentElement;
+let vb=(original.getAttribute('viewBox')||'').trim().split(/[ ,]+/).map(Number);
+if(vb.length!==4||!vb.every(Number.isFinite)||vb[2]<=0||vb[3]<=0){vb=[0,0,parseFloat(original.getAttribute('width'))||100,parseFloat(original.getAttribute('height'))||100];}
+overlay.setAttribute('viewBox',vb.join(' '));
+const items=[...doc.querySelectorAll('text')].filter(t=>!t.hasAttribute('transform')).map(t=>({text:t.textContent.trim(),x:parseFloat(t.getAttribute('x')),y:parseFloat(t.getAttribute('y'))})).filter(t=>t.text&&Number.isFinite(t.x)&&Number.isFinite(t.y));
+let selected=null;let down=null;let popupPoint=null;let popupOpen=false;let pins=[];let current=null;let nextId=1;let hoverOnly=false;let hoverTimer=null;let strokePoints=[];let draftPath=null;
+const sourceName=root.querySelector('[download]').download;
+const fingerprint=root.id+'|'+sourceName+'|'+source.length;
+function save(){if(window.openai?.setWidgetState){const state={modelContent:{file:sourceName,pins:pins.filter(p=>p.comment.trim())},privateContent:{fingerprint,nextId}};if(JSON.stringify(state).length<15000)window.openai.setWidgetState(state).catch(()=>{});}}
+function makeStroke(points,cls){const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('class',cls);path.setAttribute('d',points.map((p,i)=>(i?'L':'M')+p.x+' '+p.y).join(' '));path.setAttribute('fill','none');path.setAttribute('stroke','var(--blue)');path.setAttribute('stroke-width','2');path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');path.setAttribute('vector-effect','non-scaling-stroke');path.style.pointerEvents='none';return path;}
+function clearDraft(){draftPath?.remove();draftPath=null;strokePoints=[];}
+let lastPinRender="";
+function drawPins(){const renderKey=JSON.stringify(pins)+overlay.clientWidth+","+overlay.clientHeight;if(renderKey===lastPinRender)return;lastPinRender=renderKey;pinLayer.replaceChildren();overlay.querySelectorAll('.pin-leader').forEach(n=>n.remove());const ow=overlay.clientWidth||736,oh=overlay.clientHeight||583;for(const pin of pins){if(pin.stroke?.length>1)overlay.appendChild(makeStroke(pin.stroke,'pin-leader freehand-stroke'));const px=(pin.point.x-vb[0])/vb[2]*ow,py=(pin.point.y-vb[1])/vb[3]*oh;const bx=Math.max(16,Math.min(ow-16,px+(px>ow-44?-22:22))),by=Math.max(16,Math.min(oh-16,py));const ns='http://www.w3.org/2000/svg';const line=document.createElementNS(ns,'line');line.setAttribute('x1',pin.point.x);line.setAttribute('y1',pin.point.y);line.setAttribute('x2',vb[0]+bx/ow*vb[2]);line.setAttribute('y2',vb[1]+by/oh*vb[3]);line.setAttribute('class','pin-leader');line.setAttribute('stroke','var(--foreground)');line.setAttribute('stroke-width','1');line.setAttribute('vector-effect','non-scaling-stroke');line.style.pointerEvents='none';const dot=document.createElementNS(ns,'circle');dot.setAttribute('cx',pin.point.x);dot.setAttribute('cy',pin.point.y);dot.setAttribute('r',2*vb[2]/ow);dot.setAttribute('class','pin-leader');dot.setAttribute('fill','var(--foreground)');dot.style.pointerEvents='none';overlay.appendChild(dot);const button=document.createElement('button');button.type='button';button.className='comment-pin cursor-interaction';button.textContent=pin.id;button.setAttribute('aria-label','Comment '+pin.id+(pin.comment?': '+pin.comment:''));button.style.left=bx+'px';button.style.top=by+'px';button.onpointerenter=()=>{if(popupOpen&&!hoverOnly)return;clearTimeout(hoverTimer);openPin(pin,true);};button.onpointerleave=()=>queueHoverClose();button.onclick=()=>openPin(pin,false);pinLayer.appendChild(button);}}
+function openPin(pin,hover=false){clearTimeout(hoverTimer);hoverOnly=hover;current=pin;selected=pin.selection;comment.value=pin.comment;const r=overlay.getBoundingClientRect();popupPoint={x:(pin.point.x-vb[0])/vb[2]*r.width,y:(pin.point.y-vb[1])/vb[3]*r.height};popupOpen=true;feedback.textContent='';update();if(!hover)comment.focus({preventScroll:true});}
+function update(){
+ root.querySelector("#svg-INSTANCE-comment-title").textContent=current?"Comment #"+current.id:"Comment";
+ selectionLabel.textContent=current?'Comment #'+current.id+(selected.quote?' · “'+selected.quote+'”':''):'';
+ panel.hidden=!current||!popupOpen;
+ if(panel.hidden)root.querySelector("#svg-INSTANCE-preview-panel").style.paddingBottom="";
+ if(!panel.hidden)positionPopup();
+ send.disabled=copyComment.disabled=!current||!comment.value.trim();
+ drawPins();
+}
+function closePin(){clearTimeout(hoverTimer);hoverOnly=false;if(current&&!current.comment.trim()){pins=pins.filter(p=>p.id!==current.id);nextId=Math.max(1,...pins.filter(p=>p.comment.trim()).map(p=>p.id+1));}popupOpen=false;current=null;selected=null;update();save();}
+function queueHoverClose(){clearTimeout(hoverTimer);if(hoverOnly)hoverTimer=setTimeout(()=>{if(hoverOnly){popupOpen=false;hoverOnly=false;panel.hidden=true;root.querySelector("#svg-INSTANCE-preview-panel").style.paddingBottom="";}},140);}
+panel.addEventListener('pointerenter',()=>clearTimeout(hoverTimer));
+panel.addEventListener('pointerleave',queueHoverClose);
+comment.addEventListener('focus',()=>{hoverOnly=false;clearTimeout(hoverTimer);});
+const menu=root.querySelector('#svg-INSTANCE-context'),batch=root.querySelector('#svg-INSTANCE-send-all'),batchStatus=root.querySelector('#svg-INSTANCE-batch-status');
+root.querySelector('.selection-stage').addEventListener('contextmenu',e=>{e.preventDefault();clearTimeout(hoverTimer);popupOpen=false;update();const stage=root.querySelector('.selection-stage'),r=stage.getBoundingClientRect();menu.hidden=false;batchStatus.textContent='';batch.disabled=!pins.some(p=>p.comment.trim());menu.style.left=Math.max(4,Math.min(stage.clientWidth-menu.offsetWidth-4,e.clientX-r.left))+'px';menu.style.top=Math.max(4,Math.min(stage.clientHeight-menu.offsetHeight-4,e.clientY-r.top))+'px';});
+document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target))menu.hidden=true;});
+menu.addEventListener('keydown',e=>{if(e.key==='Escape')menu.hidden=true;});
+batch.onclick=async()=>{const list=pins.filter(p=>p.comment.trim()).map(p=>({...p}));if(!list.length)return;if(!window.openai?.sendFollowUpMessage){batchStatus.textContent='Chat sending is unavailable here.';return;}batch.disabled=true;const prompt='Please apply all '+list.length+' comments to '+sourceName+'. Coordinate bounds: '+vb.join(' ')+'.\n'+list.map(p=>'Comment #'+p.id+'\nPoint: '+JSON.stringify(p.point)+'\nSelected area: '+JSON.stringify(p.selection)+'\nDrawing: '+JSON.stringify(p.stroke||[])+'\nMy comment: '+p.comment.trim()).join('\n\n');try{await window.openai.sendFollowUpMessage({prompt,title:'Send all '+list.length+' comments to chat'});for(const sent of list){const live=pins.find(p=>p.id===sent.id);if(live&&live.comment===sent.comment)live.sent=true;}save();menu.hidden=true;update();}catch(e){batchStatus.textContent='Not sent. Try again.';}finally{batch.disabled=false;}};
+function positionPopup(){
+const stage=root.querySelector('.selection-stage'),w=stage.clientWidth,h=stage.clientHeight,pw=panel.offsetWidth,ph=panel.offsetHeight;
+const q=current?{x:(current.point.x-vb[0])/vb[2]*w,y:(current.point.y-vb[1])/vb[3]*h}:(popupPoint||{x:w/2,y:h/2});
+let bounds={left:q.x-3,right:q.x+38,top:q.y-16,bottom:q.y+16};
+if(current?.stroke?.length){const xx=current.stroke.map(p=>(p.x-vb[0])/vb[2]*w),yy=current.stroke.map(p=>(p.y-vb[1])/vb[3]*h);bounds={left:Math.min(...xx,q.x-3),right:Math.max(...xx,q.x+38),top:Math.min(...yy,q.y-16),bottom:Math.max(...yy,q.y+16)};}
+const gap=14,cy=Math.max(8,Math.min(h-ph-8,q.y-54)),cx=Math.max(8,Math.min(w-pw-8,q.x+44));
+const choices=[{x:bounds.right+gap,y:cy},{x:bounds.left-gap-pw,y:cy},{x:cx,y:bounds.top-gap-ph},{x:cx,y:bounds.bottom+gap}];
+const fit=choices.find(p=>p.x>=8&&p.y>=8&&p.x+pw<=w-8&&p.y+ph<=h-8);
+// If the mark leaves no clear space, put the popup below the image instead of covering it.
+const pos=fit||{x:Math.max(8,Math.min(w-pw-8,q.x)),y:h+gap};
+panel.style.left=pos.x+'px';panel.style.top=pos.y+'px';
+root.querySelector('#svg-INSTANCE-preview-panel').style.paddingBottom=fit?'':(ph+gap+8)+'px';
+}
+root.querySelector('#svg-INSTANCE-close').onclick=closePin;
+document.addEventListener('pointerdown',e=>{if(!popupOpen||panel.contains(e.target)||pinLayer.contains(e.target)||overlay.contains(e.target))return;closePin();});
+panel.addEventListener('keydown',e=>{if(e.key==='Escape')closePin();});
+new ResizeObserver(()=>{drawPins();if(popupOpen)positionPopup();}).observe(root.querySelector('.selection-stage'));
+function point(e){const b=overlay.getBoundingClientRect();return {x:vb[0]+Math.max(0,Math.min(1,(e.clientX-b.left)/b.width))*vb[2],y:vb[1]+Math.max(0,Math.min(1,(e.clientY-b.top)/b.height))*vb[3]};}
+function setSelection(a,b){let x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),w=Math.abs(a.x-b.x),h=Math.abs(a.y-b.y);if(w<1&&h<1){w=vb[2]*.04;h=vb[3]*.04;x=Math.max(vb[0],a.x-w/2);y=Math.max(vb[1],a.y-h/2);}w=Math.min(w,vb[0]+vb[2]-x);h=Math.min(h,vb[1]+vb[3]-y);const near=items.filter(t=>t.x>=x&&t.x<=x+w&&t.y>=y&&t.y<=y+h).map(t=>t.text);selected={x:+x.toFixed(2),y:+y.toFixed(2),width:+w.toFixed(2),height:+h.toFixed(2),quote:near.join(' / ')};update();}
+overlay.addEventListener('pointerdown',e=>{if(e.button!==0)return;if(popupOpen){closePin();down=null;return;}if(current&&!current.comment.trim()){pins=pins.filter(p=>p.id!==current.id);nextId=Math.max(1,...pins.filter(p=>p.comment.trim()).map(p=>p.id+1));}popupOpen=false;current=null;update();down=point(e);strokePoints=[down];overlay.setPointerCapture(e.pointerId);setSelection(down,down);});
+overlay.addEventListener('pointermove',e=>{if(!down)return;const q=point(e),last=strokePoints[strokePoints.length-1];if(Math.hypot(q.x-last.x,q.y-last.y)<vb[2]/(overlay.clientWidth||736)*2)return;strokePoints.push({x:+q.x.toFixed(2),y:+q.y.toFixed(2)});if(strokePoints.length>200)strokePoints=strokePoints.filter((_,i)=>i%2===0||i===strokePoints.length-1);draftPath?.remove();draftPath=makeStroke(strokePoints,'freehand-draft');overlay.appendChild(draftPath);});
+overlay.addEventListener('pointerup',e=>{if(down){const trace=strokePoints.length>2?strokePoints.slice():[];if(trace.length){const xx=trace.map(p=>p.x),yy=trace.map(p=>p.y);setSelection({x:Math.min(...xx),y:Math.min(...yy)},{x:Math.max(...xx),y:Math.max(...yy)});}else setSelection(down,point(e));clearDraft();down=null;const r=overlay.getBoundingClientRect();popupPoint={x:e.clientX-r.left,y:e.clientY-r.top};const pin={id:nextId,point:point(e),selection:selected,stroke:trace,comment:"",sent:false,committed:false};pins.push(pin);openPin(pin);save();}});
+overlay.addEventListener('pointercancel',()=>{down=null;clearDraft();});
+comment.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();if(!send.disabled)send.click();}});
+comment.oninput=()=>{if(current){current.comment=comment.value;current.sent=false;if(current.comment.trim()&&!current.committed){current.committed=true;nextId=Math.max(nextId,current.id+1);}}update();save();};
+function message(){return 'Please apply comment #'+current.id+' to '+sourceName+'.\nSelected area in SVG viewBox coordinates (origin top-left): '+JSON.stringify(selected)+'.\nSVG viewBox: '+vb.join(' ')+'.\nMy comment: '+comment.value.trim();}
+send.onclick=async()=>{if(!current||!comment.value.trim())return;if(!window.openai?.sendFollowUpMessage){feedback.textContent='Chat sending is unavailable here. Use Copy for chat.';return;}const target=current;send.disabled=true;try{await window.openai.sendFollowUpMessage({prompt:message(),title:'Comment #'+target.id+' on SVG'});target.sent=true;popupOpen=false;save();}catch(e){feedback.textContent='Comment was not sent. Try again or copy it.';}finally{update();}};
+copyComment.onclick=async()=>{try{await navigator.clipboard.writeText(message());feedback.textContent='Copied — paste into the chat box when ready.';save();}catch(e){const t=document.createElement('textarea');t.className='form-control';t.readOnly=true;t.value=message();feedback.replaceChildren(t);t.focus();t.select();}};
+function restore(state){if(popupOpen)return;if(!state||state.privateContent?.fingerprint!==fingerprint)return;const incoming=state.modelContent?.pins;if(!Array.isArray(incoming))return;pins=incoming.filter(p=>p.comment.trim()).map(p=>({...p,committed:true}));nextId=Math.max(1,...pins.map(p=>p.id+1));if(current){current=pins.find(p=>p.id===current.id)||null;selected=current?.selection||null;}update();}
+restore(window.openai?.widgetState);
+window.addEventListener('openai:set_globals',e=>restore(e.detail?.globals?.widgetState));
+update();
+root.querySelector('#svg-INSTANCE-copy').onclick=async function(){
+ const status=root.querySelector('#svg-INSTANCE-status');
+ try{await navigator.clipboard.writeText(source);status.textContent='Copied';}
+ catch(e){root.querySelector('#svg-INSTANCE-code-tab').click();field.focus();field.select();try{status.textContent=document.execCommand('copy')?'Copied':'Source selected — press Copy';}catch(e){status.textContent='Source selected — press Copy';}}
+};
+})();
+</script>
+</div>
