@@ -1,0 +1,4 @@
+interface:
+  display_name: "Image Viewer / SVG Code"
+  short_description: "View images and SVGs with numbered popup comments"
+  default_prompt: "Use $svg-preview-code to show this image with numbered comments and a download; include Code for SVGs."
