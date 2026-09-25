@@ -1,0 +1,20 @@
+{
+  "name": "rampage",
+  "interface": {
+    "displayName": "Rampage"
+  },
+  "plugins": [
+    {
+      "name": "image-viewer",
+      "source": {
+        "source": "local",
+        "path": "./plugins/image-viewer"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
